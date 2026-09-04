@@ -141,15 +141,14 @@ function TailwindsGame() {
   const nudge = useCallback(
     (leverId: string, delta: number) => {
       if (revealed || movesLeft <= 0 || !pickName) return;
-      setWorld((w) => {
-        const current = w[leverId] ?? 50;
-        const next = Math.max(0, Math.min(100, current + delta));
-        if (next === current) return w;
-        setMovesLeft((m) => m - 1);
-        return { ...w, [leverId]: next };
-      });
+      const current = world[leverId] ?? 50;
+      const next = Math.max(0, Math.min(100, current + delta));
+      if (next === current) return;
+      setWorld({ ...world, [leverId]: next });
+      setMovesLeft(movesLeft - 1);
     },
-    [revealed, movesLeft, pickName],
+    [revealed, movesLeft, pickName, world],
+
   );
 
   const lockIn = useCallback(() => {
