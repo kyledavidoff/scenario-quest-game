@@ -78,7 +78,7 @@ function buildLesson(champion: Tech, world: World, horizon: Horizon): string {
     return `${champion.name} is nearly indifferent to this world — none of its levers moved far enough from the midpoint to matter over ${horizon} years.`;
   }
   const dir = top.contribution >= 0 ? "lifts" : "punishes";
-  let text = `Over ${horizon} years, ${top.name.toLowerCase()} at "${top.pole}" ${dir} ${champion.name.toLowerCase()} hardest.`;
+  let text = `Over ${horizon} years, ${top.name.toLowerCase()} at "${top.pole}" ${dir} ${champion.name} hardest.`;
   if (second && Math.abs(second.contribution) >= 0.05) {
     const dir2 = second.contribution >= 0 ? "adds lift" : "cuts against it";
     text += ` ${second.name} at "${second.pole}" ${dir2}.`;
@@ -91,7 +91,7 @@ function buildLesson(champion: Tech, world: World, horizon: Horizon): string {
 }
 
 function TailwindsGame() {
-  const [round, setRound] = useState<Round>(() => dealRound());
+  const [round, setRound] = useState<Round>(() => OPENING_ROUND);
   const [world, setWorld] = useState<World>(() => ({ ...round.scenario.world }));
   const [movesLeft, setMovesLeft] = useState(MOVES_PER_ROUND);
   const [revealed, setRevealed] = useState(false);
@@ -112,16 +112,15 @@ function TailwindsGame() {
   const nudge = useCallback(
     (leverId: string, delta: number) => {
       if (revealed || movesLeft <= 0) return;
-      setWorld((prev) => {
-        const current = prev[leverId] ?? 50;
-        const next = Math.max(0, Math.min(100, current + delta));
-        if (next === current) return prev;
-        setMovesLeft((m) => m - 1);
-        return { ...prev, [leverId]: next };
-      });
+      const current = world[leverId] ?? 50;
+      const next = Math.max(0, Math.min(100, current + delta));
+      if (next === current) return;
+      setWorld({ ...world, [leverId]: next });
+      setMovesLeft(movesLeft - 1);
     },
-    [revealed, movesLeft],
+    [revealed, movesLeft, world],
   );
+
 
   const cashOut = useCallback(() => {
     setRevealed(true);
