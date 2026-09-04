@@ -11,18 +11,20 @@ type Props = {
   baseWorld: World;
   movesLeft: number;
   disabled: boolean;
+  notice?: string;
   onNudge: (leverId: string, delta: number) => void;
 };
 
-export function LeverBoard({ world, baseWorld, movesLeft, disabled, onNudge }: Props) {
+export function LeverBoard({ world, baseWorld, movesLeft, disabled, notice, onNudge }: Props) {
   return (
     <div className="surface-plate piece-lg rounded-xl p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-mono text-sm font-extrabold uppercase tracking-wide">The board</h2>
         <p className="text-xs font-medium text-muted-foreground">
-          Each nudge costs one move. {movesLeft} left.
+          {notice ?? `Each nudge costs one move. ${movesLeft} left.`}
         </p>
       </div>
+
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {LEVERS.map((lever) => {
