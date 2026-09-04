@@ -11,7 +11,7 @@ type Props = {
   baseWorld: World;
   movesLeft: number;
   disabled: boolean;
-  notice?: string;
+  notice?: string | undefined;
   onNudge: (leverId: string, delta: number) => void;
 };
 
