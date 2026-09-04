@@ -154,19 +154,19 @@ export type Driver = { leverId: string; name: string; contribution: number; pole
 
 /** Which levers are doing the most work for one sector, strongest first. */
 export function drivers(tech: Tech, world: World, horizon: Horizon): Driver[] {
-  return Object.entries(tech.weights)
-    .map(([id, weight]) => {
-      const lever = LMAP[id];
-      const dev = ((world[id] ?? 50) - 50) / 50;
-      const contribution = weight * dev * MULT[lever.speed][horizon];
-      return {
-        leverId: id,
-        name: lever.name,
-        contribution,
-        pole: (world[id] ?? 50) >= 50 ? lever.hi : lever.lo,
-      };
-    })
-    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+  const out: Driver[] = [];
+  for (const [id, weight] of Object.entries(tech.weights)) {
+    const lever = LMAP[id];
+    if (!lever) continue;
+    const dev = ((world[id] ?? 50) - 50) / 50;
+    out.push({
+      leverId: id,
+      name: lever.name,
+      contribution: weight * dev * MULT[lever.speed][horizon],
+      pole: (world[id] ?? 50) >= 50 ? lever.hi : lever.lo,
+    });
+  }
+  return out.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
 }
 
 export type Grade = { label: string; note: string; tone: "win" | "mid" | "loss" };
