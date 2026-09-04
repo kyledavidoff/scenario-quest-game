@@ -1,13 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 
-import { ChampionCard } from "@/components/game/ChampionCard";
+import { CandidateCard } from "@/components/game/CandidateCard";
 import { Leaderboard } from "@/components/game/Leaderboard";
 import { LeverBoard } from "@/components/game/LeverBoard";
 import { RevealPanel } from "@/components/game/RevealPanel";
 import {
   drivers,
-  grade,
   HORIZON_LABEL,
   rankAll,
   score,
@@ -19,9 +18,9 @@ import {
   type World,
 } from "@/lib/tailwinds";
 
-const TITLE = "Tailwinds — bet on which technologies a world rewards";
+const TITLE = "Tailwinds — guess which technology a world rewards";
 const DESCRIPTION =
-  "A five-move strategy game. You are dealt a world and a technology to champion. Nudge the levers that shape the future and find out which sectors get a tailwind.";
+  "A quick guessing game. You are dealt a world and three technology sectors. Read the levers, call the winner, then see the answer and why it moved.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -30,22 +29,28 @@ export const Route = createFileRoute("/")({
       { name: "description", content: DESCRIPTION },
       { property: "og:title", content: TITLE },
       { property: "og:description", content: DESCRIPTION },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: TailwindsGame,
 });
 
-const MOVES_PER_ROUND = 5;
+const MOVES_PER_ROUND = 2;
 const HORIZONS: Horizon[] = [3, 5, 10];
 
 type Round = {
   scenario: ScenarioCard;
-  champion: Tech;
+  candidates: Tech[];
   horizon: Horizon;
 };
 
 function pick<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]!;
+}
+
+function techByName(name: string): Tech {
+  return TECHS.find((t) => t.name === name) ?? TECHS[0]!;
 }
 
 /**
@@ -54,31 +59,39 @@ function pick<T>(items: T[]): T {
  */
 const OPENING_ROUND: Round = {
   scenario: SCENARIOS[0]!,
-  champion: TECHS.find((t) => t.name === "Nuclear fission & SMRs") ?? TECHS[0]!,
+  candidates: [
+    techByName("Nuclear fission & SMRs"),
+    techByName(TECHS[3]!.name),
+    techByName(TECHS[7]!.name),
+  ],
   horizon: 5,
 };
 
 function dealRound(previous: Round): Round {
   let scenario = pick(SCENARIOS);
-  let champion = pick(TECHS);
   let guard = 0;
   while (scenario.id === previous.scenario.id && guard++ < 12) scenario = pick(SCENARIOS);
+
+  const chosen: Tech[] = [];
   guard = 0;
-  while (champion.name === previous.champion.name && guard++ < 12) champion = pick(TECHS);
-  return { scenario, champion, horizon: pick(HORIZONS) };
+  while (chosen.length < 3 && guard++ < 200) {
+    const t = pick(TECHS);
+    if (chosen.some((c) => c.name === t.name)) continue;
+    chosen.push(t);
+  }
+  return { scenario, candidates: chosen, horizon: pick(HORIZONS) };
 }
 
-
-/** A plain-language read of what the world is doing to the champion. */
-function buildLesson(champion: Tech, world: World, horizon: Horizon): string {
-  const ds = drivers(champion, world, horizon);
+/** A plain-language read of what the world is doing to the picked sector. */
+function buildLesson(tech: Tech, world: World, horizon: Horizon): string {
+  const ds = drivers(tech, world, horizon);
   const top = ds[0];
   const second = ds[1];
   if (!top || Math.abs(top.contribution) < 0.05) {
-    return `${champion.name} is nearly indifferent to this world — none of its levers moved far enough from the midpoint to matter over ${horizon} years.`;
+    return `${tech.name} is nearly indifferent to this world — none of its levers moved far enough from the midpoint to matter over ${horizon} years.`;
   }
   const dir = top.contribution >= 0 ? "lifts" : "punishes";
-  let text = `Over ${horizon} years, ${top.name.toLowerCase()} at "${top.pole}" ${dir} ${champion.name} hardest.`;
+  let text = `Over ${horizon} years, ${top.name.toLowerCase()} at "${top.pole}" ${dir} ${tech.name} hardest.`;
   if (second && Math.abs(second.contribution) >= 0.05) {
     const dir2 = second.contribution >= 0 ? "adds lift" : "cuts against it";
     text += ` ${second.name} at "${second.pole}" ${dir2}.`;
@@ -92,49 +105,72 @@ function buildLesson(champion: Tech, world: World, horizon: Horizon): string {
 
 function TailwindsGame() {
   const [round, setRound] = useState<Round>(() => OPENING_ROUND);
-  const [world, setWorld] = useState<World>(() => ({ ...round.scenario.world }));
+  const [world, setWorld] = useState<World>(() => ({ ...OPENING_ROUND.scenario.world }));
+  const [pickName, setPickName] = useState<string | null>(null);
+  const [signGuess, setSignGuess] = useState<"tailwind" | "headwind" | null>(null);
   const [movesLeft, setMovesLeft] = useState(MOVES_PER_ROUND);
   const [revealed, setRevealed] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [points, setPoints] = useState(0);
+  const [roundPoints, setRoundPoints] = useState(0);
   const [roundNo, setRoundNo] = useState(1);
 
-  const { scenario, champion, horizon } = round;
+  const { scenario, candidates, horizon } = round;
 
+  const results = useMemo(
+    () => candidates.map((t) => ({ name: t.name, value: score(t.weights, world, horizon) })),
+    [candidates, world, horizon],
+  );
+  const picked = pickName ? techByName(pickName) : null;
+  const pickValue = results.find((r) => r.name === pickName)?.value ?? 0;
+  const allDrivers = useMemo(
+    () => (picked ? drivers(picked, world, horizon) : []),
+    [picked, world, horizon],
+  );
+  const lesson = useMemo(
+    () => (picked ? buildLesson(picked, world, horizon) : ""),
+    [picked, world, horizon],
+  );
   const ranked = useMemo(() => rankAll(world, horizon), [world, horizon]);
-  const value = useMemo(() => score(champion.weights, world, horizon), [champion, world, horizon]);
-  const championRank = ranked.find((r) => r.name === champion.name)?.rank ?? 25;
-  const allDrivers = useMemo(() => drivers(champion, world, horizon), [champion, world, horizon]);
-  const topDrivers = allDrivers.slice(0, 4);
-  const lesson = useMemo(() => buildLesson(champion, world, horizon), [champion, world, horizon]);
-  const result = grade(value, championRank);
-  const leader = ranked[0]!;
+
+  const bestValue = Math.max(...results.map((r) => r.value));
+  const correct = pickValue >= bestValue;
+  const signCorrect =
+    signGuess === null ? null : signGuess === (pickValue >= 0 ? "tailwind" : "headwind");
 
   const nudge = useCallback(
     (leverId: string, delta: number) => {
-      if (revealed || movesLeft <= 0) return;
+      if (revealed || movesLeft <= 0 || !pickName) return;
       const current = world[leverId] ?? 50;
       const next = Math.max(0, Math.min(100, current + delta));
       if (next === current) return;
       setWorld({ ...world, [leverId]: next });
       setMovesLeft(movesLeft - 1);
     },
-    [revealed, movesLeft, world],
+    [revealed, movesLeft, pickName, world],
+
   );
 
-
-  const cashOut = useCallback(() => {
+  const lockIn = useCallback(() => {
+    const earned = (correct ? 2 : 0) + (signCorrect ? 1 : 0);
+    setRoundPoints(earned);
+    setPoints((p) => p + earned);
+    setStreak((s) => (correct ? s + 1 : 0));
     setRevealed(true);
-    setStreak((s) => (value >= 12 ? s + 1 : 0));
-  }, [value]);
+  }, [correct, signCorrect]);
 
   const nextRound = useCallback(() => {
     const next = dealRound(round);
     setRound(next);
     setWorld({ ...next.scenario.world });
+    setPickName(null);
+    setSignGuess(null);
     setMovesLeft(MOVES_PER_ROUND);
     setRevealed(false);
     setRoundNo((n) => n + 1);
   }, [round]);
+
+  const candidateNames = candidates.map((c) => c.name);
 
   return (
     <main className="min-h-screen bg-background">
@@ -147,7 +183,7 @@ function TailwindsGame() {
             <div className="leading-none">
               <h1 className="font-mono text-2xl font-extrabold tracking-tight">TAILWINDS</h1>
               <p className="mt-1 text-xs font-medium text-muted-foreground">
-                15 levers · 25 sectors · one world
+                guess the sector the world rewards
               </p>
             </div>
           </div>
@@ -157,6 +193,9 @@ function TailwindsGame() {
             </span>
             <span className="surface-plate piece rounded-lg px-3 py-1.5 font-mono text-xs font-bold tracking-wide">
               {HORIZON_LABEL[horizon]} VIEW
+            </span>
+            <span className="surface-plate piece rounded-lg px-3 py-1.5 font-mono text-xs font-bold tracking-wide">
+              SCORE {points}
             </span>
             <span className="piece rounded-lg bg-accent px-3 py-1.5 font-mono text-xs font-bold tracking-wide text-accent-foreground">
               STREAK {streak}
@@ -170,22 +209,21 @@ function TailwindsGame() {
           </p>
           <p className="mt-1 text-sm text-foreground/80">{scenario.blurb}</p>
           <p className="mt-1.5 text-xs text-muted-foreground">
-            You have {MOVES_PER_ROUND} nudges. Bend this world so your sector catches the wind — the
-            leaderboard shows every knock-on effect as you go.
+            Guess which of the three sectors this world rewards most over {horizon} years. After you
+            commit you get {MOVES_PER_ROUND} nudges to bend the world your way.
           </p>
         </section>
 
         <div className="grid gap-5 lg:grid-cols-12">
           <div className="lg:col-span-5">
-            {revealed ? (
+            {revealed && pickName ? (
               <RevealPanel
-                champion={champion.name}
                 scenarioName={scenario.name}
-                value={value}
-                rank={championRank}
-                best={leader.name}
-                bestValue={leader.value}
-                grade={result}
+                pick={pickName}
+                results={results}
+                correct={correct}
+                signCorrect={signCorrect}
+                points={roundPoints}
                 lesson={lesson}
                 helped={allDrivers.filter((d) => d.contribution > 0.05).slice(0, 3)}
                 hurt={allDrivers.filter((d) => d.contribution < -0.05).slice(0, 3)}
@@ -193,14 +231,16 @@ function TailwindsGame() {
                 onNext={nextRound}
               />
             ) : (
-              <ChampionCard
-                champion={champion.name}
-                value={value}
-                rank={championRank}
+              <CandidateCard
+                candidates={candidateNames}
+                pick={pickName}
+                signGuess={signGuess}
+                value={pickValue}
                 movesLeft={movesLeft}
-                topDrivers={topDrivers}
-                onCashOut={cashOut}
-                locked={false}
+                topDrivers={allDrivers.slice(0, 4)}
+                onPick={setPickName}
+                onSignGuess={setSignGuess}
+                onLockIn={lockIn}
               />
             )}
           </div>
@@ -210,7 +250,8 @@ function TailwindsGame() {
               world={world}
               baseWorld={scenario.world}
               movesLeft={movesLeft}
-              disabled={revealed || movesLeft <= 0}
+              disabled={revealed || movesLeft <= 0 || !pickName}
+              notice={!pickName ? "Read the levers, then pick a sector to unlock your nudges." : undefined}
               onNudge={nudge}
             />
           </div>
@@ -218,22 +259,36 @@ function TailwindsGame() {
 
         <div className="grid gap-5 lg:grid-cols-12">
           <div className="lg:col-span-7">
-            <Leaderboard ranked={ranked} champion={champion.name} />
+            {revealed ? (
+              <Leaderboard ranked={ranked} candidates={candidateNames} pick={pickName} />
+            ) : (
+              <div className="surface-plate piece-lg flex h-full min-h-40 flex-col items-center justify-center rounded-xl p-6 text-center">
+                <p className="font-mono text-sm font-extrabold uppercase tracking-wide">
+                  Sector leaderboard sealed
+                </p>
+                <p className="mt-1.5 max-w-sm text-xs text-muted-foreground">
+                  All 25 sector scores stay face down until you lock in your answer. No peeking.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-5">
             <h3 className="mb-2 font-mono text-sm font-extrabold uppercase tracking-wide">
-              Reading the world
+              How to read a world
             </h3>
             <div className="surface-lacquer piece-lg rounded-xl p-4">
               <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary-foreground/55">
-                Live causal read
+                {picked ? "Live causal read" : "The rules"}
               </p>
-              <p className="mt-2 text-sm leading-relaxed text-primary-foreground/90">{lesson}</p>
+              <p className="mt-2 text-sm leading-relaxed text-primary-foreground/90">
+                {picked
+                  ? lesson
+                  : "Each lever sits somewhere between two poles. Sectors care about different levers, and slow levers only bite over a longer horizon — so the same world can reward opposite bets at 3 and 10 years."}
+              </p>
               <p className="mt-3 text-[11px] leading-relaxed text-primary-foreground/50">
-                Fast levers shape the 3 year view, slow ones only bite by year 10. The index runs
-                &minus;50 to +50 and says whether a world helps or hurts a sector, not how big the
-                market gets.
+                Right sector: 2 points. Right tailwind/headwind call: 1 more. Fast levers shape the 3
+                year view, slow ones only bite by year 10. The index runs &minus;50 to +50.
               </p>
             </div>
           </div>

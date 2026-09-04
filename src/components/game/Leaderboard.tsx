@@ -2,16 +2,19 @@ import { fmt, type Ranked } from "@/lib/tailwinds";
 
 type Props = {
   ranked: Ranked[];
-  champion: string;
+  candidates: string[];
+  pick: string | null;
 };
 
-/** Top 6, bottom 3, plus the champion's row wherever it sits. */
-function visibleRows(ranked: Ranked[], champion: string): Array<Ranked | "gap"> {
+/** Top 6, bottom 3, plus every candidate row wherever it sits. */
+function visibleRows(ranked: Ranked[], candidates: string[]): Array<Ranked | "gap"> {
   const keep = new Set<number>();
   ranked.slice(0, 6).forEach((r) => keep.add(r.rank));
   ranked.slice(-3).forEach((r) => keep.add(r.rank));
-  const champ = ranked.find((r) => r.name === champion);
-  if (champ) keep.add(champ.rank);
+  for (const name of candidates) {
+    const row = ranked.find((r) => r.name === name);
+    if (row) keep.add(row.rank);
+  }
 
   const rows: Array<Ranked | "gap"> = [];
   let gapped = false;
@@ -27,8 +30,9 @@ function visibleRows(ranked: Ranked[], champion: string): Array<Ranked | "gap"> 
   return rows;
 }
 
-export function Leaderboard({ ranked, champion }: Props) {
-  const rows = visibleRows(ranked, champion);
+export function Leaderboard({ ranked, candidates, pick }: Props) {
+  const rows = visibleRows(ranked, candidates);
+
 
   return (
     <div>
@@ -50,28 +54,36 @@ export function Leaderboard({ ranked, champion }: Props) {
               <li
                 key={row.name}
                 className={`flex items-center justify-between gap-3 px-4 py-2 ${
-                  row.name === champion ? "bg-accent/10" : ""
+                  candidates.includes(row.name) ? "bg-accent/10" : ""
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span
                     className={`w-5 shrink-0 font-mono text-xs font-bold ${
-                      row.name === champion ? "text-accent" : "text-muted-foreground"
+                      candidates.includes(row.name) ? "text-accent" : "text-muted-foreground"
                     }`}
                   >
                     {String(row.rank).padStart(2, "0")}
                   </span>
                   <span
-                    className={`truncate text-sm ${row.name === champion ? "font-semibold" : "font-medium"}`}
+                    className={`truncate text-sm ${
+                      candidates.includes(row.name) ? "font-semibold" : "font-medium"
+                    }`}
                   >
                     {row.name}
-                    {row.name === champion && (
+                    {row.name === pick && (
                       <span className="ml-2 font-mono text-[9px] font-bold uppercase tracking-wider text-accent">
-                        your bet
+                        your pick
+                      </span>
+                    )}
+                    {candidates.includes(row.name) && row.name !== pick && (
+                      <span className="ml-2 font-mono text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                        candidate
                       </span>
                     )}
                   </span>
                 </div>
+
                 <span
                   className={`tabular shrink-0 font-mono text-base font-extrabold ${
                     row.value >= 0 ? "text-tailwind" : "text-headwind"
