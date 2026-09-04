@@ -48,17 +48,26 @@ function pick<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]!;
 }
 
-function dealRound(previous?: Round): Round {
+/**
+ * The very first round is fixed so server and client render the same HTML.
+ * Every later round is dealt at random, client-side.
+ */
+const OPENING_ROUND: Round = {
+  scenario: SCENARIOS[0]!,
+  champion: TECHS.find((t) => t.name === "Nuclear fission & SMRs") ?? TECHS[0]!,
+  horizon: 5,
+};
+
+function dealRound(previous: Round): Round {
   let scenario = pick(SCENARIOS);
   let champion = pick(TECHS);
-  if (previous) {
-    let guard = 0;
-    while (scenario.id === previous.scenario.id && guard++ < 12) scenario = pick(SCENARIOS);
-    guard = 0;
-    while (champion.name === previous.champion.name && guard++ < 12) champion = pick(TECHS);
-  }
+  let guard = 0;
+  while (scenario.id === previous.scenario.id && guard++ < 12) scenario = pick(SCENARIOS);
+  guard = 0;
+  while (champion.name === previous.champion.name && guard++ < 12) champion = pick(TECHS);
   return { scenario, champion, horizon: pick(HORIZONS) };
 }
+
 
 /** A plain-language read of what the world is doing to the champion. */
 function buildLesson(champion: Tech, world: World, horizon: Horizon): string {
