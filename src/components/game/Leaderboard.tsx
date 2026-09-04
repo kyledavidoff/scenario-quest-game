@@ -54,28 +54,36 @@ export function Leaderboard({ ranked, candidates, pick }: Props) {
               <li
                 key={row.name}
                 className={`flex items-center justify-between gap-3 px-4 py-2 ${
-                  row.name === champion ? "bg-accent/10" : ""
+                  candidates.includes(row.name) ? "bg-accent/10" : ""
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span
                     className={`w-5 shrink-0 font-mono text-xs font-bold ${
-                      row.name === champion ? "text-accent" : "text-muted-foreground"
+                      candidates.includes(row.name) ? "text-accent" : "text-muted-foreground"
                     }`}
                   >
                     {String(row.rank).padStart(2, "0")}
                   </span>
                   <span
-                    className={`truncate text-sm ${row.name === champion ? "font-semibold" : "font-medium"}`}
+                    className={`truncate text-sm ${
+                      candidates.includes(row.name) ? "font-semibold" : "font-medium"
+                    }`}
                   >
                     {row.name}
-                    {row.name === champion && (
+                    {row.name === pick && (
                       <span className="ml-2 font-mono text-[9px] font-bold uppercase tracking-wider text-accent">
-                        your bet
+                        your pick
+                      </span>
+                    )}
+                    {candidates.includes(row.name) && row.name !== pick && (
+                      <span className="ml-2 font-mono text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                        candidate
                       </span>
                     )}
                   </span>
                 </div>
+
                 <span
                   className={`tabular shrink-0 font-mono text-base font-extrabold ${
                     row.value >= 0 ? "text-tailwind" : "text-headwind"
