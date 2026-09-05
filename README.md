@@ -38,8 +38,7 @@ To deploy on Vercel, import this repository and accept the defaults. The build c
    things you would observe if the world were real, and the forces in play at your horizon.
 2. **You pick three sectors** out of 25. Hover a sector to see one line on what it sells.
 3. **You submit.** The game scores your picks against the model, shows the true top three with the
-   reason each one won, shows what the world funds and what it starves, and names the internal
-   tensions in that world.
+   reason each one won, and gives your own three picks the same treatment.
 4. **You deal a new world** and keep a running score.
 
 Scoring is one point for each of your three picks that lands in the true top three.
@@ -153,13 +152,13 @@ Three pieces do this work, all in `src/lib/tailwinds.ts`:
   decisive one in a headline, then builds a body from the two strongest lifts and the strongest
   counterweight. If a slow lever is a major driver, it adds a note saying whether that lever has
   landed yet.
-- **`readWorld(world, horizon)`** describes the world itself. It returns the loudest forces in
-  play, the levers that are set but have not landed at this horizon, the four sectors the world
-  funds, the four it starves, and any internal tensions.
+- **`readWorld(world, horizon)`** describes the world itself. The world card uses two of its
+  fields: the loudest forces in play, and the levers that are set but have not landed at this
+  horizon.
 
-`TENSIONS` is a list of contradiction rules. If a world sets a shooting war and a broke state at the
-same time, the game says so. Those pairings are where a scenario is most likely to be wrong, and
-naming them teaches more than the ranking alone.
+`readWorld()` also returns the four sectors a world funds, the four it starves, and any internal
+tensions from the `TENSIONS` rule list. Nothing renders those three today. They stay in the model
+because they are cheap to compute and useful if you ever want a summary panel or a study mode.
 
 ---
 
