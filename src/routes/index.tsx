@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 
+import logo from "../assets/logo.png";
+
 import {
   drivers,
   fmt,
@@ -132,7 +134,7 @@ function TailwindsGame() {
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <img
-              src="/src/assets/logo.png"
+              src={logo}
               alt="Scenario Quest"
               className="size-11 shrink-0 rounded-lg border-2 border-border bg-paper object-contain p-1 shadow-[3px_3px_0_0_var(--color-border)]"
             />
