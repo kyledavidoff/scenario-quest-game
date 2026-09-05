@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 
+import logo from "../assets/logo.png";
+
 import {
   drivers,
   fmt,
@@ -13,9 +15,9 @@ import {
   type Tech,
 } from "@/lib/tailwinds";
 
-const TITLE = "Tailwinds — guess which technologies a world rewards";
+const TITLE = "Scenario Quest — guess which technologies a world rewards";
 const DESCRIPTION =
-  "A quick guessing game. You are dealt a hypothetical world and a time horizon. Pick the three technologies it rewards most, then see the answer and why.";
+  "A quick scenario guessing game. You are dealt a hypothetical world and a time horizon. Pick the three technologies it rewards most, then see the answer and why.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -131,11 +133,13 @@ function TailwindsGame() {
       <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-8 sm:px-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="surface-lacquer piece grid size-11 shrink-0 place-items-center rounded-lg">
-              <span className="font-mono text-base font-extrabold text-primary-foreground">TW</span>
-            </div>
+            <img
+              src={logo}
+              alt="Scenario Quest"
+              className="size-11 shrink-0 rounded-lg border-2 border-border bg-paper object-contain p-1 shadow-[3px_3px_0_0_var(--color-border)]"
+            />
             <div className="leading-none">
-              <h1 className="font-mono text-2xl font-extrabold tracking-tight">TAILWINDS</h1>
+              <h1 className="font-mono text-2xl font-extrabold tracking-tight">SCENARIO QUEST</h1>
               <p className="mt-1 text-xs font-medium text-muted-foreground">
                 guess the sectors the world rewards
               </p>
