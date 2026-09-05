@@ -4,10 +4,11 @@ import { useCallback, useMemo, useState } from "react";
 import logo from "../assets/logo.png";
 
 import {
-  drivers,
+  explain,
   fmt,
   HORIZON_LABEL,
   rankAll,
+  readWorld,
   SCENARIOS,
   TECHS,
   type Horizon,
@@ -59,23 +60,8 @@ function dealRound(previous: Round): Round {
 
 /** A plain-language read of what the world is doing to one sector. */
 function buildLesson(tech: Tech, round: Round): string {
-  const ds = drivers(tech, round.scenario.world, round.horizon);
-  const top = ds[0];
-  const second = ds[1];
-  if (!top || Math.abs(top.contribution) < 0.05) {
-    return `${tech.name} is nearly indifferent to this world — none of its levers moved far enough from the midpoint to matter over ${round.horizon} years.`;
-  }
-  const dir = top.contribution >= 0 ? "lifts" : "punishes";
-  let text = `Over ${round.horizon} years, ${top.name.toLowerCase()} at "${top.pole}" ${dir} ${tech.name} hardest.`;
-  if (second && Math.abs(second.contribution) >= 0.05) {
-    const dir2 = second.contribution >= 0 ? "adds lift" : "cuts against it";
-    text += ` ${second.name} at "${second.pole}" ${dir2}.`;
-  }
-  const slow = ds.find((d) => Math.abs(d.contribution) < 0.12 && Math.abs(d.contribution) > 0);
-  if (slow && round.horizon === 3) {
-    text += ` Slow levers like ${slow.name.toLowerCase()} barely register this early.`;
-  }
-  return text;
+  const e = explain(tech, round.scenario.world, round.horizon);
+  return `${e.headline} ${e.body}`.trim();
 }
 
 function TailwindsGame() {
@@ -86,6 +72,8 @@ function TailwindsGame() {
   const [roundsPlayed, setRoundsPlayed] = useState(0);
 
   const { scenario, horizon } = round;
+
+  const reading = useMemo(() => readWorld(scenario.world, horizon), [scenario, horizon]);
 
   const ranked = useMemo(
     () => (phase === "revealed" ? rankAll(scenario.world, horizon) : []),
@@ -213,9 +201,56 @@ function TailwindsGame() {
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-primary-foreground/85 sm:text-base">
               {scenario.blurb}
             </p>
-            <p className="mt-3 text-xs leading-relaxed text-primary-foreground/55">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-primary-foreground/70">
+              {scenario.premise}
+            </p>
+
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary-foreground/50">
+                  What you would see
+                </p>
+                <ul className="mt-2 grid gap-1.5">
+                  {scenario.signals.map((s) => (
+                    <li
+                      key={s}
+                      className="flex gap-2 text-xs leading-relaxed text-primary-foreground/75"
+                    >
+                      <span className="mt-[6px] size-1 shrink-0 rounded-full bg-primary-foreground/40" />
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary-foreground/50">
+                  Forces in play at {horizon} years
+                </p>
+                <ul className="mt-2 grid gap-1.5">
+                  {reading.forces.map((f) => (
+                    <li
+                      key={f.leverId}
+                      className="text-xs leading-relaxed text-primary-foreground/75"
+                    >
+                      <span className="font-mono font-bold text-primary-foreground">{f.name}</span>{" "}
+                      {f.pole.toLowerCase()}
+                      {f.landed !== "now" && (
+                        <span className="text-primary-foreground/45">
+                          {f.landed === "building" ? " · still building" : " · barely started"}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs leading-relaxed text-primary-foreground/55">
               Judged over {horizon} years. Some forces hit fast and fade; slow ones only bite by
               year 10.
+              {reading.pending.length > 0 && (
+                <> Set but not yet landed here: {reading.pending.join(", ").toLowerCase()}.</>
+              )}
             </p>
           </section>
         )}
@@ -238,6 +273,7 @@ function TailwindsGame() {
                   <button
                     key={t.name}
                     type="button"
+                    title={t.what}
                     onClick={() => togglePick(t.name)}
                     className={`pressable flex items-center justify-between gap-2 rounded-lg border-2 px-3 py-2.5 text-left ${
                       chosen
@@ -275,31 +311,38 @@ function TailwindsGame() {
               <div className="mt-3 grid gap-2">
                 {actualTop.map((r, i) => {
                   const youGotIt = picks.includes(r.name);
+                  const tech = techByName(r.name);
                   return (
                     <div
                       key={r.name}
-                      className={`piece flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 ${
+                      className={`piece rounded-lg px-3 py-2.5 ${
                         youGotIt ? "bg-tailwind/15" : "bg-background"
                       }`}
                     >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="piece grid size-7 shrink-0 place-items-center rounded-md bg-accent font-mono text-xs font-extrabold text-accent-foreground">
-                          {i + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold">{r.name}</p>
-                          <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            {youGotIt ? "you called it" : "you missed it"}
-                          </p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="piece grid size-7 shrink-0 place-items-center rounded-md bg-accent font-mono text-xs font-extrabold text-accent-foreground">
+                            {i + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold">{r.name}</p>
+                            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                              {youGotIt ? "you called it" : "you missed it"}
+                            </p>
+                          </div>
                         </div>
+                        <span
+                          className={`tabular shrink-0 font-mono text-xl font-extrabold ${
+                            r.value >= 0 ? "text-tailwind" : "text-headwind"
+                          }`}
+                        >
+                          {fmt(r.value)}
+                        </span>
                       </div>
-                      <span
-                        className={`tabular shrink-0 font-mono text-xl font-extrabold ${
-                          r.value >= 0 ? "text-tailwind" : "text-headwind"
-                        }`}
-                      >
-                        {fmt(r.value)}
-                      </span>
+                      <p className="mt-2 text-xs leading-relaxed text-foreground/60">{tech.what}</p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-foreground/80">
+                        {buildLesson(tech, round)}
+                      </p>
                     </div>
                   );
                 })}
@@ -311,6 +354,74 @@ function TailwindsGame() {
                     ? "Missed all three."
                     : `You got ${hits.length} of ${PICKS}.`}
               </p>
+            </div>
+
+            <div className="surface-plate piece-lg rounded-xl p-5">
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                How this world reads — {horizon} year view
+              </p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <h4 className="font-mono text-xs font-extrabold uppercase tracking-wide">
+                    What it funds
+                  </h4>
+                  <ul className="mt-2 grid gap-1.5">
+                    {reading.funds.length === 0 && (
+                      <li className="text-xs leading-relaxed text-muted-foreground">
+                        Nothing gains much at this horizon.
+                      </li>
+                    )}
+                    {reading.funds.map((r) => (
+                      <li
+                        key={r.name}
+                        className="flex items-baseline justify-between gap-2 text-xs leading-relaxed"
+                      >
+                        <span className="font-semibold">{r.name}</span>
+                        <span className="tabular shrink-0 font-mono font-bold text-tailwind">
+                          {fmt(r.value)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-mono text-xs font-extrabold uppercase tracking-wide">
+                    What it starves
+                  </h4>
+                  <ul className="mt-2 grid gap-1.5">
+                    {reading.starves.length === 0 && (
+                      <li className="text-xs leading-relaxed text-muted-foreground">
+                        Nothing is badly hurt at this horizon.
+                      </li>
+                    )}
+                    {reading.starves.map((r) => (
+                      <li
+                        key={r.name}
+                        className="flex items-baseline justify-between gap-2 text-xs leading-relaxed"
+                      >
+                        <span className="font-semibold">{r.name}</span>
+                        <span className="tabular shrink-0 font-mono font-bold text-headwind">
+                          {fmt(r.value)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              {reading.tensions.length > 0 && (
+                <div className="mt-4 border-t-2 border-border pt-3">
+                  <h4 className="font-mono text-xs font-extrabold uppercase tracking-wide">
+                    Tensions in this world
+                  </h4>
+                  <ul className="mt-2 grid gap-1.5">
+                    {reading.tensions.map((t) => (
+                      <li key={t} className="text-xs leading-relaxed text-foreground/75">
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             {picks.length > 0 && (
@@ -337,7 +448,10 @@ function TailwindsGame() {
                             </span>
                           </p>
                         </div>
-                        <p className="mt-1.5 text-xs leading-relaxed text-foreground/75">
+                        <p className="mt-1.5 text-xs leading-relaxed text-foreground/60">
+                          {tech.what}
+                        </p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-foreground/80">
                           {buildLesson(tech, round)}
                         </p>
                       </div>

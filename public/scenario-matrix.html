@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Technology Development Scenarios</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --pos:#2a78d6; --neg:#e34948; --neutral:#f0efec;
+    --track:#f2f1ed;
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --page:#0d0d0d;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+    --pos:#3987e5; --neg:#e66767; --neutral:#383835;
+    --track:#222220;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--page); color:var(--text-primary);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:14px; line-height:1.5;
+  }
+  header{padding:28px 28px 10px; max-width:1500px; margin:0 auto}
+  h1{font-size:22px; margin:0 0 6px; font-weight:600}
+  .sub{color:var(--text-secondary); max-width:760px; margin:0 0 4px}
+  .wrap{display:grid; grid-template-columns:400px 1fr; align-items:start; gap:20px; padding:12px 28px 60px; max-width:1500px; margin:0 auto}
+  @media (max-width:1000px){ .wrap{grid-template-columns:1fr} }
+  .card{background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:18px}
+  .levcard{position:sticky; top:14px; max-height:calc(100vh - 40px); overflow-y:auto}
+  @media (max-width:1000px){ .levcard{position:static; max-height:none} }
+  .card h2{font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary); margin:0 0 12px; font-weight:600}
+
+  .controls{display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:0 28px; max-width:1500px; margin:0 auto 4px}
+  button, select{
+    font:inherit; font-size:13px; color:var(--text-primary); background:var(--surface-1);
+    border:1px solid var(--border); border-radius:7px; padding:7px 12px; cursor:pointer;
+  }
+  button:hover, select:hover{background:var(--track)}
+  .seg{display:inline-flex; border:1px solid var(--border); border-radius:7px; overflow:hidden; background:var(--surface-1)}
+  .seg button{border:0; border-radius:0; padding:7px 14px}
+  .seg button[aria-pressed="true"]{background:var(--pos); color:#fff}
+  .spacer{flex:1}
+
+  .group-label{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:16px 0 8px; font-weight:600}
+  .group-label:first-of-type{margin-top:0}
+  .lever{margin-bottom:14px}
+  .lever .name{display:flex; justify-content:space-between; font-size:13px; font-weight:500; margin-bottom:3px}
+  .lever .val{font-variant-numeric:tabular-nums; color:var(--text-secondary); font-weight:400}
+  .poles{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:2px}
+  input[type=range]{width:100%; accent-color:var(--pos); margin:0}
+
+  .chartwrap{position:relative}
+  .row{display:grid; grid-template-columns:272px 1fr 52px; align-items:center; gap:10px; margin-bottom:2px}
+  @media (max-width:640px){ .row{grid-template-columns:140px 1fr 46px} }
+  .rlabel{font-size:12.5px; color:var(--text-secondary); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .track{position:relative; height:17px; background:var(--track); border-radius:3px; cursor:default}
+  .track::before{content:""; position:absolute; left:50%; top:-1px; bottom:-1px; width:1px; background:var(--baseline)}
+  .bar{position:absolute; top:2px; bottom:2px}
+  .bar.pos{left:50%; background:var(--pos); border-radius:0 4px 4px 0}
+  .bar.neg{right:50%; background:var(--neg); border-radius:4px 0 0 4px}
+  .rval{font-size:12px; font-variant-numeric:tabular-nums; color:var(--text-secondary); text-align:right}
+  .rval.q{color:var(--muted)}
+  .axis{display:grid; grid-template-columns:272px 1fr 52px; gap:10px; margin-bottom:10px; font-size:11px; color:var(--muted)}
+  @media (max-width:640px){ .axis{grid-template-columns:140px 1fr 46px} }
+  .axis .mid{display:flex; justify-content:space-between}
+  .key{display:flex; gap:16px; font-size:12px; color:var(--text-secondary); margin-bottom:14px; align-items:center; flex-wrap:wrap}
+  .key span{display:inline-flex; align-items:center; gap:6px}
+  .sw{width:11px; height:11px; border-radius:2px; display:inline-block}
+
+  #tip{
+    position:fixed; pointer-events:none; opacity:0; transition:opacity .1s;
+    background:var(--surface-1); border:1px solid var(--border); border-radius:8px;
+    padding:10px 12px; font-size:12px; max-width:270px; z-index:50;
+    box-shadow:0 6px 20px rgba(0,0,0,.14);
+  }
+  #tip .t{font-weight:600; margin-bottom:5px; font-size:12.5px}
+  #tip .d{color:var(--text-secondary); display:flex; justify-content:space-between; gap:12px}
+  #tip .h{color:var(--muted); margin-top:6px; font-size:11px; text-transform:uppercase; letter-spacing:.05em}
+
+  table{border-collapse:collapse; width:100%; font-size:13px}
+  th,td{text-align:left; padding:7px 10px; border-bottom:1px solid var(--grid)}
+  th{color:var(--text-secondary); font-weight:600; font-size:12px}
+  td.n{text-align:right; font-variant-numeric:tabular-nums}
+  .hidden{display:none}
+  .summary{margin-top:18px; padding:16px 18px; border:1px solid var(--border); border-radius:9px; background:var(--track)}
+  .summary h3{margin:0 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary); font-weight:600}
+  .summary .lead{margin:0; color:var(--text-primary); font-size:13.5px}
+  .sumgrid{display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:14px}
+  @media (max-width:760px){ .sumgrid{grid-template-columns:1fr} }
+  .sumgrid h4{margin:0 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600}
+  .sumgrid ul{margin:0; padding-left:16px; font-size:13px; color:var(--text-secondary)}
+  .sumgrid li{margin-bottom:3px}
+  .sumgrid li b{color:var(--text-primary); font-weight:600}
+  .tension{margin-top:14px}
+  .tension h4{margin:0 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600}
+  .tension div{font-size:13px; color:var(--text-secondary); border-left:2px solid var(--neg); padding:2px 0 2px 10px; margin-bottom:7px}
+  .pending{margin-top:12px; font-size:12.5px; color:var(--muted)}
+  .note{font-size:12.5px; color:var(--text-secondary); margin-top:16px; padding-top:14px; border-top:1px solid var(--grid)}
+  .note b{color:var(--text-primary)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Technology Development Scenarios</h1>
+  <p class="sub">Set each lever and the chart shows which technology categories gain or lose under that reality.</p>
+</header>
+
+<div class="controls">
+  <div class="seg" id="horizon">
+    <button data-h="3" aria-pressed="false">3 years</button>
+    <button data-h="5" aria-pressed="true">5 years</button>
+    <button data-h="10" aria-pressed="false">10 years</button>
+  </div>
+  <select id="preset">
+    <option value="base">Preset: Baseline (all midpoints)</option>
+    <option value="rearm">Preset: Fragmented Rearmament</option>
+    <option value="abund">Preset: Cheap Energy Abundance</option>
+    <option value="stag">Preset: Grinding Stagnation</option>
+    <option value="lock">Preset: Locked-down Takeoff</option>
+  </select>
+  <button id="reset">Reset</button>
+  <div class="spacer"></div>
+  <button id="tableBtn" aria-pressed="false">Table view</button>
+  <button id="theme">Dark mode</button>
+</div>
+
+<div class="wrap">
+  <div class="card levcard">
+    <h2>Levers</h2>
+    <div id="levers"></div>
+  </div>
+
+  <div class="card">
+    <h2 id="chartTitle">Technology tailwind index — 5 year view</h2>
+    <div class="key">
+      <span><i class="sw" style="background:var(--pos)"></i> Tailwind (positive)</span>
+      <span><i class="sw" style="background:var(--neg)"></i> Headwind (negative)</span>
+      <span style="color:var(--muted)">Hover a bar for its top drivers.</span>
+    </div>
+
+    <div id="chart" class="chartwrap"></div>
+
+    <div id="tableView" class="hidden">
+      <table>
+        <thead><tr><th>Technology category</th><th class="n">Index</th><th>Top driver</th><th>Second driver</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="summary" id="summary"></div>
+    <p class="note"><b>Read this as a thinking tool, not a forecast.</b> The weights are my judgment, not measured data. The index runs from &minus;50 to +50. It says whether a world helps or hurts a category, not how big the market gets. Slow levers barely move the 3&nbsp;year view, while fast levers fade by year&nbsp;10.</p>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+const LEVERS = [
+  {id:'capital', name:'Cost of capital',        lo:'Free money',        hi:'High real rates',   speed:'fast'},
+  {id:'order',   name:'Domestic political order',lo:'Stable, legitimate',hi:'Contested, violent',speed:'fast'},
+  {id:'aislope', name:'AI capability slope',    lo:'Clear plateau',     hi:'Fast compounding',  speed:'fast'},
+  {id:'aigov',   name:'AI governance tightness',lo:'Open weights',      hi:'State-licensed',    speed:'fast'},
+  {id:'trade',   name:'Trade regime',           lo:'Open global trade', hi:'Hard blocs',        speed:'fast'},
+  {id:'conflict',name:'Great-power conflict',   lo:'Cold peace',        hi:'Shooting war',      speed:'medium'},
+  {id:'interv',  name:'US foreign posture',     lo:'Full retreat',      hi:'Max intervention',  speed:'medium'},
+  {id:'fiscal',  name:'State fiscal capacity',  lo:'Broke, paralyzed',  hi:'Solvent, funding',  speed:'medium'},
+  {id:'energy',  name:'Energy price',           lo:'Cheap, abundant',   hi:'Scarce, expensive', speed:'medium'},
+  {id:'labor',   name:'Labor balance',          lo:'Worker shortage',   hi:'Automation surplus',speed:'medium'},
+  {id:'trust',   name:'Institutional trust',    lo:'High trust',        hi:'Collapsed trust',   speed:'medium'},
+  {id:'china',   name:'China stress',           lo:'Strong, confident', hi:'Stagnation, crisis',speed:'slow'},
+  {id:'demog',   name:'Demographic pressure',   lo:'Young, growing',    hi:'Steep aging',       speed:'slow'},
+  {id:'climate', name:'Climate shock rate',     lo:'Gradual',           hi:'Frequent, severe',  speed:'slow'},
+  {id:'bio',     name:'Biotech access',         lo:'Tightly controlled',hi:'Cheap, open',       speed:'slow'}
+];
+const LMAP = Object.fromEntries(LEVERS.map(l=>[l.id,l]));
+
+const TECHS = [
+  ['Autonomous weapons & counter-drone', {conflict:1.0, interv:0.8, fiscal:0.4, china:0.3, trade:0.3, capital:-0.2}],
+  ['Frontier AI labs & large models',    {aislope:1.0, capital:-0.5, energy:-0.4, aigov:-0.3, fiscal:0.2}],
+  ['Edge & open-weight small models',    {aigov:-0.8, energy:0.4, aislope:0.3, trust:0.3, trade:0.2}],
+  ['AI audit, eval & compliance tooling',{aigov:1.0, aislope:0.5, trust:0.3, fiscal:0.2}],
+  ['Domestic fabs & semiconductor tools',{trade:1.0, conflict:0.6, fiscal:0.6, china:0.4, capital:-0.3}],
+  ['Industrial robotics & automation',   {labor:-0.6, demog:0.6, trade:0.4, capital:-0.4, energy:-0.2}],
+  ['Nuclear fission & SMRs',             {fiscal:0.8, energy:0.7, capital:-0.6, climate:0.4, conflict:0.3, trade:0.2}],
+  ['Grid, storage & transmission',       {energy:0.7, climate:0.6, fiscal:0.6, capital:-0.4, aislope:0.3}],
+  ['Fusion & deep-tech moonshots',       {capital:-0.9, fiscal:0.6, energy:0.4, order:-0.4, conflict:-0.2}],
+  ['Space launch & orbital assets',      {conflict:0.7, fiscal:0.6, interv:0.5, china:0.3, capital:-0.4}],
+  ['Surveillance & identity verification',{order:0.9, trust:0.5, conflict:0.4, aigov:0.3, bio:0.2}],
+  ['Content provenance & authentication',{trust:0.9, aislope:0.6, order:0.4}],
+  ['Cybersecurity & hardened comms',     {conflict:0.8, order:0.6, aislope:0.5, interv:0.4, china:0.3}],
+  ['Parallel financial rails',           {trust:0.9, order:0.8, trade:0.3, capital:0.2}],
+  ['Private security & physical resilience',{order:1.0, trust:0.5, climate:0.4}],
+  ['Biosecurity & pathogen detection',   {bio:1.0, conflict:0.4, fiscal:0.4, climate:0.3}],
+  ['Longevity & care technology',        {demog:0.9, capital:-0.4, bio:0.3, labor:-0.3, fiscal:0.3}],
+  ['Climate adaptation & water',         {climate:1.0, fiscal:0.4, energy:0.3}],
+  ['Resilient agriculture & food tech',  {climate:0.8, trade:0.5, energy:0.3, bio:0.3}],
+  ['Insurance & catastrophe modeling',   {climate:0.8, aislope:0.4, order:0.4, conflict:0.3}],
+  ['Consumer software & apps',           {capital:-0.6, order:-0.5, aislope:0.4, trade:-0.2, trust:-0.2}],
+  ['Enterprise AI & workflow automation',{aislope:0.8, labor:0.3, demog:0.3, capital:-0.3}],
+  ['Logistics & supply-chain software',  {trade:0.8, conflict:0.4, climate:0.4, demog:0.3}],
+  ['Energy efficiency & demand response',{energy:0.9, climate:0.4, capital:-0.2}],
+  ['Border & migration technology',      {order:0.6, climate:0.5, demog:0.5, interv:0.3}]
+];
+
+const MULT = {
+  fast:   {3:1.00, 5:0.80, 10:0.45},
+  medium: {3:0.40, 5:1.00, 10:0.85},
+  slow:   {3:0.12, 5:0.45, 10:1.00}
+};
+
+const PRESETS = {
+  base: {},
+  rearm:{conflict:80, interv:75, trade:85, fiscal:40, capital:70, china:65, order:60, aigov:65, aislope:60, energy:60, trust:65, demog:60, climate:55, bio:45, labor:45},
+  abund:{aislope:85, energy:15, capital:25, fiscal:70, trade:20, conflict:20, order:25, trust:35, labor:70, aigov:35, china:40, demog:55, climate:40, bio:60, interv:35},
+  stag: {capital:80, aislope:25, fiscal:20, order:65, trust:75, trade:65, energy:65, conflict:45, demog:75, climate:60, labor:40, china:70, aigov:55, bio:50, interv:30},
+  lock: {aislope:95, aigov:90, fiscal:65, order:60, trust:70, capital:40, conflict:55, labor:85, trade:60, energy:55, china:55, demog:55, climate:50, bio:35, interv:50}
+};
+
+let state = Object.fromEntries(LEVERS.map(l=>[l.id,50]));
+let horizon = 5;
+let showTable = false;
+
+// ---- build lever controls ----
+const levBox = document.getElementById('levers');
+const SPEED_TITLE = {
+  fast:'Fast levers — shape the 3 year view',
+  medium:'Medium levers — shape the 5 year view',
+  slow:'Slow levers — shape the 10 year view'
+};
+['fast','medium','slow'].forEach(sp=>{
+  const h = document.createElement('div');
+  h.className='group-label'; h.textContent=SPEED_TITLE[sp];
+  levBox.appendChild(h);
+  LEVERS.filter(l=>l.speed===sp).forEach(l=>{
+    const d = document.createElement('div');
+    d.className='lever';
+    d.innerHTML = `<div class="name"><span>${l.name}</span><span class="val" id="v-${l.id}">50</span></div>
+      <input type="range" min="0" max="100" step="1" value="50" id="s-${l.id}" aria-label="${l.name}">
+      <div class="poles"><span>${l.lo}</span><span>${l.hi}</span></div>`;
+    levBox.appendChild(d);
+    d.querySelector('input').addEventListener('input', e=>{
+      state[l.id] = +e.target.value;
+      document.getElementById('v-'+l.id).textContent = e.target.value;
+      render();
+    });
+  });
+});
+
+function syncSliders(){
+  LEVERS.forEach(l=>{
+    document.getElementById('s-'+l.id).value = state[l.id];
+    document.getElementById('v-'+l.id).textContent = state[l.id];
+  });
+}
+
+// ---- scoring ----
+function score(weights){
+  let raw=0, denom=0, parts=[];
+  for(const [id,w] of Object.entries(weights)){
+    const dev = (state[id]-50)/50;
+    const m = MULT[LMAP[id].speed][horizon];
+    const c = w*dev*m;
+    raw += c; denom += Math.abs(w);
+    if(Math.abs(c)>0.001) parts.push({id, c});
+  }
+  const s = denom ? Math.max(-50, Math.min(50, 50*raw/denom)) : 0;
+  parts.sort((a,b)=>Math.abs(b.c)-Math.abs(a.c));
+  return {s, parts};
+}
+
+function results(){
+  return TECHS.map(([name,w])=>{
+    const r = score(w);
+    return {name, s:r.s, parts:r.parts};
+  }).sort((a,b)=>b.s-a.s);
+}
+
+function driverText(p){
+  const l = LMAP[p.id];
+  const v = state[p.id];
+  const pole = v>=50 ? l.hi : l.lo;
+  return `${l.name}: ${pole}`;
+}
+
+const EFFECT = {
+  capital:{hi:'Capital is expensive, so anything with a long payback struggles to get funded.',
+           lo:'Capital is cheap, so speculative long-horizon projects find money easily.'},
+  order:  {hi:'Domestic politics is contested, so demand shifts toward control, security, and verification.',
+           lo:'Domestic politics is stable, so ordinary consumer and enterprise demand holds up.'},
+  aislope:{hi:'AI capability keeps compounding, so cognition-heavy products absorb the investment and the talent.',
+           lo:'AI capability has plateaued, so money rotates toward physical automation and energy.'},
+  aigov:  {hi:'The state licenses models and compute, so compliance becomes a required purchase.',
+           lo:'Model weights stay open, so capability spreads to edge devices and small teams.'},
+  trade:  {hi:'Trade splits into blocs, so countries duplicate supply chains inside their own borders.',
+           lo:'Trade stays open, so firms buy the cheapest input anywhere and specialize hard.'},
+  conflict:{hi:'Major powers are fighting, so defense procurement sets the pace for hardware.',
+           lo:'Major powers hold a cold peace, so civilian demand leads and defense budgets stay flat.'},
+  interv: {hi:'The United States intervenes widely, so it funds force projection and dual-use research.',
+           lo:'The United States pulls back, so allies buy their own defense and US programs shrink.'},
+  fiscal: {hi:'The state can fund large programs, so capital-heavy public projects actually move.',
+           lo:'The state is broke, so anything that needs a government customer stalls.'},
+  energy: {hi:'Energy is scarce and expensive, so both efficiency and new supply get paid.',
+           lo:'Energy is cheap, so power-hungry systems scale and efficiency plays lose urgency.'},
+  labor:  {hi:'Automation has created a worker surplus, so deployment meets political resistance.',
+           lo:'Workers are scarce, so automation has a guaranteed buyer and a fast payback.'},
+  trust:  {hi:'Institutional trust has collapsed, so verification and parallel systems find real demand.',
+           lo:'Institutional trust holds, so centralized systems keep their default position.'},
+  china:  {hi:'China is under stress, so supply chains and security assumptions both get rewritten.',
+           lo:'China is strong and confident, so competition stays economic rather than disruptive.'},
+  demog:  {hi:'Rich countries age steeply, so care, longevity, and labor substitution all grow.',
+           lo:'Workforces stay young, so labor substitution faces much less urgency.'},
+  climate:{hi:'Climate shocks arrive often, so adaptation and risk pricing become core spending.',
+           lo:'Climate change stays gradual, so adaptation spending stays discretionary.'},
+  bio:    {hi:'Biological tools are cheap and open, so detection and biosecurity become large markets.',
+           lo:'Biological tools stay controlled, so biosecurity demand stays narrow and state-driven.'}
+};
+
+const TENSIONS = [
+  {when:s=>s.conflict>=65 && s.fiscal<=40,
+   text:'You want a war economy on a broke state. Something has to give. Either debt rises sharply, or the programs get cut.'},
+  {when:s=>s.aislope>=70 && s.energy>=65,
+   text:'AI compounds while energy is scarce. Power becomes the binding constraint, not chips. Price that in.'},
+  {when:s=>s.aislope>=70 && s.aigov>=70,
+   text:'Capability rises while access narrows. Value concentrates in a few licensed operators, and the open ecosystem thins out.'},
+  {when:s=>s.labor>=65 && s.demog>=65,
+   text:'You set both steep aging and an automation surplus. These fight each other. Decide which one dominates the labor market.'},
+  {when:s=>s.trade>=70 && s.fiscal<=40,
+   text:'You are reshoring supply chains without the money to subsidize them. The cost passes to consumers, and reshoring slows.'},
+  {when:s=>s.trust>=70 && s.order<=35,
+   text:'Trust has collapsed but the political order holds. That pairing is unstable. Expect one of the two to move.'},
+  {when:s=>s.energy<=30 && s.climate>=65,
+   text:'Energy is cheap while climate shocks worsen. That means either cheap fossil fuel or a very fast clean buildout. Pick one.'},
+  {when:s=>s.conflict<=30 && s.interv>=70,
+   text:'You set maximum intervention with no great-power conflict. That means small wars and policing, not peer warfare.'},
+  {when:s=>s.aislope<=30 && s.labor>=65,
+   text:'AI has plateaued yet labor is in surplus. Check where that surplus came from, because AI did not cause it here.'},
+  {when:s=>s.capital>=70 && s.fiscal>=65,
+   text:'Private capital is expensive while the state is solvent. The government becomes the buyer of first resort for deep tech.'},
+  {when:s=>s.order>=65 && s.aislope>=70,
+   text:'Political disorder meets fast AI. Expect the surveillance and the authentication markets to grow together.'},
+  {when:s=>s.china>=70 && s.trade<=35,
+   text:'China is in crisis while trade stays open. That is a deflation story, not a decoupling story. Cheap goods keep flowing.'}
+];
+
+function renderSummary(rows){
+  const box = document.getElementById('summary');
+  const ranked = LEVERS.map(l=>{
+    const d = state[l.id]-50;
+    return {l, d, w: Math.abs(d)*MULT[l.speed][horizon]};
+  }).filter(x=>Math.abs(x.d)>=12).sort((a,b)=>b.w-a.w);
+
+  if(!ranked.length){
+    box.innerHTML = `<h3>How this world reads</h3>
+      <p class="lead">Every lever sits at or near its midpoint. Nothing is favored and nothing is starved.
+      Move a slider, or load a preset, to see the world take shape.</p>`;
+    return;
+  }
+
+  const active = ranked.filter(x=>x.w>=7).slice(0,4);
+  const pending = ranked.filter(x=>x.w<7).map(x=>x.l.name);
+  const lead = (active.length ? active : ranked.slice(0,2))
+    .map(x=> EFFECT[x.l.id][x.d>0?'hi':'lo']).join(' ');
+
+  const wins = rows.filter(r=>r.s>=3).slice(0,4);
+  const loss = rows.filter(r=>r.s<=-3).slice(-4).reverse();
+  const li = a => a.length
+    ? a.map(r=>`<li><b>${r.name}</b> &nbsp;${(r.s>0?'+':'')+r.s.toFixed(0)}</li>`).join('')
+    : '<li>Nothing moves far enough to matter at this horizon.</li>';
+
+  const tens = TENSIONS.filter(t=>t.when(state)).slice(0,3);
+
+  box.innerHTML = `
+    <h3>How this world reads — ${horizon} year view</h3>
+    <p class="lead">${lead}</p>
+    <div class="sumgrid">
+      <div><h4>What this world funds</h4><ul>${li(wins)}</ul></div>
+      <div><h4>What this world starves</h4><ul>${li(loss)}</ul></div>
+    </div>
+    ${tens.length ? `<div class="tension"><h4>Tensions to resolve</h4>${tens.map(t=>`<div>${t.text}</div>`).join('')}</div>` : ''}
+    ${pending.length ? `<p class="pending">Set but not yet landed at ${horizon} years: ${pending.join(', ')}. Switch horizon to see them bite.</p>` : ''}
+  `;
+}
+
+// ---- render ----
+const chart = document.getElementById('chart');
+const tip = document.getElementById('tip');
+
+function render(){
+  document.getElementById('chartTitle').textContent =
+    `Technology tailwind index — ${horizon} year view`;
+  const rows = results();
+
+  const axis = `<div class="axis"><span></span><span class="mid"><span>&minus;50 headwind</span><span>0</span><span>+50 tailwind</span></span><span></span></div>`;
+  chart.innerHTML = axis + rows.map((r,i)=>{
+    const pct = Math.abs(r.s); // axis half-width = 50 index points
+    const cls = r.s>=0 ? 'pos':'neg';
+    const label = Math.abs(r.s)>=8 ? (r.s>0?'+':'') + r.s.toFixed(0) : '';
+    const q = label ? '' : ' q';
+    return `<div class="row" data-i="${i}">
+      <div class="rlabel" title="${r.name}">${r.name}</div>
+      <div class="track"><div class="bar ${cls}" style="width:${pct}%"></div></div>
+      <div class="rval${q}">${label || ((r.s>0?'+':'') + r.s.toFixed(0))}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('tbody').innerHTML = rows.map(r=>{
+    const d1 = r.parts[0] ? driverText(r.parts[0]) : '—';
+    const d2 = r.parts[1] ? driverText(r.parts[1]) : '—';
+    return `<tr><td>${r.name}</td><td class="n">${(r.s>0?'+':'')+r.s.toFixed(1)}</td><td>${d1}</td><td>${d2}</td></tr>`;
+  }).join('');
+
+  renderSummary(rows);
+
+  chart.querySelectorAll('.row').forEach(el=>{
+    const r = rows[+el.dataset.i];
+    el.addEventListener('mousemove', e=>{
+      const top = r.parts.slice(0,3);
+      tip.innerHTML = `<div class="t">${r.name}</div>
+        <div class="d"><span>Index</span><b>${(r.s>0?'+':'')+r.s.toFixed(1)}</b></div>
+        <div class="h">Top drivers now</div>` +
+        (top.length ? top.map(p=>`<div class="d"><span>${driverText(p)}</span><b>${p.c>0?'+':'−'}</b></div>`).join('')
+                    : `<div class="d"><span>All levers at midpoint</span></div>`);
+      tip.style.opacity=1;
+      const x = Math.min(e.clientX+14, window.innerWidth-290);
+      const y = Math.min(e.clientY+14, window.innerHeight-160);
+      tip.style.left=x+'px'; tip.style.top=y+'px';
+    });
+    el.addEventListener('mouseleave', ()=>{ tip.style.opacity=0; });
+  });
+}
+
+// ---- controls ----
+document.querySelectorAll('#horizon button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    horizon = +b.dataset.h;
+    document.querySelectorAll('#horizon button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+    render();
+  });
+});
+document.getElementById('preset').addEventListener('change', e=>{
+  const p = PRESETS[e.target.value] || {};
+  LEVERS.forEach(l=> state[l.id] = p[l.id] ?? 50);
+  syncSliders(); render();
+});
+document.getElementById('reset').addEventListener('click', ()=>{
+  LEVERS.forEach(l=> state[l.id]=50);
+  document.getElementById('preset').value='base';
+  syncSliders(); render();
+});
+document.getElementById('tableBtn').addEventListener('click', e=>{
+  showTable = !showTable;
+  document.getElementById('tableView').classList.toggle('hidden', !showTable);
+  chart.classList.toggle('hidden', showTable);
+  e.target.setAttribute('aria-pressed', showTable);
+  e.target.textContent = showTable ? 'Chart view' : 'Table view';
+});
+document.getElementById('theme').addEventListener('click', e=>{
+  const dark = document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme', dark?'light':'dark');
+  e.target.textContent = dark ? 'Dark mode' : 'Light mode';
+});
+if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+  document.documentElement.setAttribute('data-theme','dark');
+  document.getElementById('theme').textContent='Light mode';
+}
+render();
+</script>
+</body>
+</html>
