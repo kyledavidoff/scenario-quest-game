@@ -1,26 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 
-import { CandidateCard } from "@/components/game/CandidateCard";
-import { Leaderboard } from "@/components/game/Leaderboard";
-import { LeverBoard } from "@/components/game/LeverBoard";
-import { RevealPanel } from "@/components/game/RevealPanel";
 import {
   drivers,
+  fmt,
   HORIZON_LABEL,
   rankAll,
-  score,
   SCENARIOS,
   TECHS,
   type Horizon,
   type ScenarioCard,
   type Tech,
-  type World,
 } from "@/lib/tailwinds";
 
-const TITLE = "Tailwinds — guess which technology a world rewards";
+const TITLE = "Tailwinds — guess which technologies a world rewards";
 const DESCRIPTION =
-  "A quick guessing game. You are dealt a world and three technology sectors. Read the levers, call the winner, then see the answer and why it moved.";
+  "A quick guessing game. You are dealt a hypothetical world and a time horizon. Pick the three technologies it rewards most, then see the answer and why.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -36,14 +31,11 @@ export const Route = createFileRoute("/")({
   component: TailwindsGame,
 });
 
-const MOVES_PER_ROUND = 2;
+const PICKS = 3;
 const HORIZONS: Horizon[] = [3, 5, 10];
 
-type Round = {
-  scenario: ScenarioCard;
-  candidates: Tech[];
-  horizon: Horizon;
-};
+type Round = { scenario: ScenarioCard; horizon: Horizon };
+type Phase = "intro" | "playing" | "revealed";
 
 function pick<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]!;
@@ -53,128 +45,90 @@ function techByName(name: string): Tech {
   return TECHS.find((t) => t.name === name) ?? TECHS[0]!;
 }
 
-/**
- * The very first round is fixed so server and client render the same HTML.
- * Every later round is dealt at random, client-side.
- */
-const OPENING_ROUND: Round = {
-  scenario: SCENARIOS[0]!,
-  candidates: [
-    techByName("Nuclear fission & SMRs"),
-    techByName(TECHS[3]!.name),
-    techByName(TECHS[7]!.name),
-  ],
-  horizon: 5,
-};
+/** Fixed opening round so server and client render identical HTML. */
+const OPENING_ROUND: Round = { scenario: SCENARIOS[0]!, horizon: 5 };
 
 function dealRound(previous: Round): Round {
   let scenario = pick(SCENARIOS);
   let guard = 0;
   while (scenario.id === previous.scenario.id && guard++ < 12) scenario = pick(SCENARIOS);
-
-  const chosen: Tech[] = [];
-  guard = 0;
-  while (chosen.length < 3 && guard++ < 200) {
-    const t = pick(TECHS);
-    if (chosen.some((c) => c.name === t.name)) continue;
-    chosen.push(t);
-  }
-  return { scenario, candidates: chosen, horizon: pick(HORIZONS) };
+  return { scenario, horizon: pick(HORIZONS) };
 }
 
-/** A plain-language read of what the world is doing to the picked sector. */
-function buildLesson(tech: Tech, world: World, horizon: Horizon): string {
-  const ds = drivers(tech, world, horizon);
+/** A plain-language read of what the world is doing to one sector. */
+function buildLesson(tech: Tech, round: Round): string {
+  const ds = drivers(tech, round.scenario.world, round.horizon);
   const top = ds[0];
   const second = ds[1];
   if (!top || Math.abs(top.contribution) < 0.05) {
-    return `${tech.name} is nearly indifferent to this world — none of its levers moved far enough from the midpoint to matter over ${horizon} years.`;
+    return `${tech.name} is nearly indifferent to this world — none of its levers moved far enough from the midpoint to matter over ${round.horizon} years.`;
   }
   const dir = top.contribution >= 0 ? "lifts" : "punishes";
-  let text = `Over ${horizon} years, ${top.name.toLowerCase()} at "${top.pole}" ${dir} ${tech.name} hardest.`;
+  let text = `Over ${round.horizon} years, ${top.name.toLowerCase()} at "${top.pole}" ${dir} ${tech.name} hardest.`;
   if (second && Math.abs(second.contribution) >= 0.05) {
     const dir2 = second.contribution >= 0 ? "adds lift" : "cuts against it";
     text += ` ${second.name} at "${second.pole}" ${dir2}.`;
   }
   const slow = ds.find((d) => Math.abs(d.contribution) < 0.12 && Math.abs(d.contribution) > 0);
-  if (slow && horizon === 3) {
+  if (slow && round.horizon === 3) {
     text += ` Slow levers like ${slow.name.toLowerCase()} barely register this early.`;
   }
   return text;
 }
 
 function TailwindsGame() {
-  const [round, setRound] = useState<Round>(() => OPENING_ROUND);
-  const [world, setWorld] = useState<World>(() => ({ ...OPENING_ROUND.scenario.world }));
-  const [pickName, setPickName] = useState<string | null>(null);
-  const [signGuess, setSignGuess] = useState<"tailwind" | "headwind" | null>(null);
-  const [movesLeft, setMovesLeft] = useState(MOVES_PER_ROUND);
-  const [revealed, setRevealed] = useState(false);
-  const [streak, setStreak] = useState(0);
-  const [points, setPoints] = useState(0);
-  const [roundPoints, setRoundPoints] = useState(0);
-  const [roundNo, setRoundNo] = useState(1);
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [round, setRound] = useState<Round>(OPENING_ROUND);
+  const [picks, setPicks] = useState<string[]>([]);
+  const [scoreTotal, setScoreTotal] = useState(0);
+  const [roundsPlayed, setRoundsPlayed] = useState(0);
 
-  const { scenario, candidates, horizon } = round;
+  const { scenario, horizon } = round;
 
-  const results = useMemo(
-    () => candidates.map((t) => ({ name: t.name, value: score(t.weights, world, horizon) })),
-    [candidates, world, horizon],
+  const ranked = useMemo(
+    () => (phase === "revealed" ? rankAll(scenario.world, horizon) : []),
+    [phase, scenario, horizon],
   );
-  const picked = pickName ? techByName(pickName) : null;
-  const pickValue = results.find((r) => r.name === pickName)?.value ?? 0;
-  const allDrivers = useMemo(
-    () => (picked ? drivers(picked, world, horizon) : []),
-    [picked, world, horizon],
-  );
-  const lesson = useMemo(
-    () => (picked ? buildLesson(picked, world, horizon) : ""),
-    [picked, world, horizon],
-  );
-  const ranked = useMemo(() => rankAll(world, horizon), [world, horizon]);
+  const actualTop = ranked.slice(0, PICKS);
+  const hits = actualTop.filter((r) => picks.includes(r.name));
 
-  const bestValue = Math.max(...results.map((r) => r.value));
-  const correct = pickValue >= bestValue;
-  const signCorrect =
-    signGuess === null ? null : signGuess === (pickValue >= 0 ? "tailwind" : "headwind");
+  const start = useCallback(() => {
+    setPhase("playing");
+    setPicks([]);
+  }, []);
 
-  const nudge = useCallback(
-    (leverId: string, delta: number) => {
-      if (revealed || movesLeft <= 0 || !pickName) return;
-      const current = world[leverId] ?? 50;
-      const next = Math.max(0, Math.min(100, current + delta));
-      if (next === current) return;
-      setWorld({ ...world, [leverId]: next });
-      setMovesLeft(movesLeft - 1);
+  const togglePick = useCallback(
+    (name: string) => {
+      if (phase !== "playing") return;
+      setPicks((prev) =>
+        prev.includes(name)
+          ? prev.filter((p) => p !== name)
+          : prev.length < PICKS
+            ? [...prev, name]
+            : prev,
+      );
     },
-    [revealed, movesLeft, pickName, world],
-
+    [phase],
   );
 
-  const lockIn = useCallback(() => {
-    const earned = (correct ? 2 : 0) + (signCorrect ? 1 : 0);
-    setRoundPoints(earned);
-    setPoints((p) => p + earned);
-    setStreak((s) => (correct ? s + 1 : 0));
-    setRevealed(true);
-  }, [correct, signCorrect]);
+  const submit = useCallback(() => {
+    if (picks.length !== PICKS) return;
+    const top = rankAll(scenario.world, horizon).slice(0, PICKS);
+    const earned = top.filter((r) => picks.includes(r.name)).length;
+    setScoreTotal((s) => s + earned);
+    setRoundsPlayed((n) => n + 1);
+    setPhase("revealed");
+  }, [picks, scenario, horizon]);
 
-  const nextRound = useCallback(() => {
-    const next = dealRound(round);
-    setRound(next);
-    setWorld({ ...next.scenario.world });
-    setPickName(null);
-    setSignGuess(null);
-    setMovesLeft(MOVES_PER_ROUND);
-    setRevealed(false);
-    setRoundNo((n) => n + 1);
-  }, [round]);
-
-  const candidateNames = candidates.map((c) => c.name);
+  const playAgain = useCallback(() => {
+    setRound((prev) => dealRound(prev));
+    setPicks([]);
+    setPhase("playing");
+  }, []);
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-8 sm:px-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="surface-lacquer piece grid size-11 shrink-0 place-items-center rounded-lg">
@@ -183,116 +137,221 @@ function TailwindsGame() {
             <div className="leading-none">
               <h1 className="font-mono text-2xl font-extrabold tracking-tight">TAILWINDS</h1>
               <p className="mt-1 text-xs font-medium text-muted-foreground">
-                guess the sector the world rewards
+                guess the sectors the world rewards
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          {roundsPlayed > 0 && (
             <span className="surface-plate piece rounded-lg px-3 py-1.5 font-mono text-xs font-bold tracking-wide">
-              ROUND {String(roundNo).padStart(2, "0")}
+              SCORE {scoreTotal}/{roundsPlayed * PICKS}
             </span>
-            <span className="surface-plate piece rounded-lg px-3 py-1.5 font-mono text-xs font-bold tracking-wide">
-              {HORIZON_LABEL[horizon]} VIEW
-            </span>
-            <span className="surface-plate piece rounded-lg px-3 py-1.5 font-mono text-xs font-bold tracking-wide">
-              SCORE {points}
-            </span>
-            <span className="piece rounded-lg bg-accent px-3 py-1.5 font-mono text-xs font-bold tracking-wide text-accent-foreground">
-              STREAK {streak}
-            </span>
-          </div>
+          )}
         </header>
 
-        <section className="surface-plate piece-lg rounded-xl px-4 py-3">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-destructive">
-            Dealt world — {scenario.name}
-          </p>
-          <p className="mt-1 text-sm text-foreground/80">{scenario.blurb}</p>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            Guess which of the three sectors this world rewards most over {horizon} years. After you
-            commit you get {MOVES_PER_ROUND} nudges to bend the world your way.
-          </p>
-        </section>
-
-        <div className="grid gap-5 lg:grid-cols-12">
-          <div className="lg:col-span-5">
-            {revealed && pickName ? (
-              <RevealPanel
-                scenarioName={scenario.name}
-                pick={pickName}
-                results={results}
-                correct={correct}
-                signCorrect={signCorrect}
-                points={roundPoints}
-                lesson={lesson}
-                helped={allDrivers.filter((d) => d.contribution > 0.05).slice(0, 3)}
-                hurt={allDrivers.filter((d) => d.contribution < -0.05).slice(0, 3)}
-                streak={streak}
-                onNext={nextRound}
-              />
-            ) : (
-              <CandidateCard
-                candidates={candidateNames}
-                pick={pickName}
-                signGuess={signGuess}
-                value={pickValue}
-                movesLeft={movesLeft}
-                topDrivers={allDrivers.slice(0, 4)}
-                onPick={setPickName}
-                onSignGuess={setSignGuess}
-                onLockIn={lockIn}
-              />
-            )}
-          </div>
-
-          <div className="lg:col-span-7">
-            <LeverBoard
-              world={world}
-              baseWorld={scenario.world}
-              movesLeft={movesLeft}
-              disabled={revealed || movesLeft <= 0 || !pickName}
-              notice={!pickName ? "Read the levers, then pick a sector to unlock your nudges." : undefined}
-              onNudge={nudge}
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-12">
-          <div className="lg:col-span-7">
-            {revealed ? (
-              <Leaderboard ranked={ranked} candidates={candidateNames} pick={pickName} />
-            ) : (
-              <div className="surface-plate piece-lg flex h-full min-h-40 flex-col items-center justify-center rounded-xl p-6 text-center">
-                <p className="font-mono text-sm font-extrabold uppercase tracking-wide">
-                  Sector leaderboard sealed
+        {phase === "intro" && (
+          <section className="surface-plate piece-lg rounded-xl p-6 sm:p-8">
+            <h2 className="font-mono text-xl font-extrabold tracking-tight sm:text-2xl">
+              HOW TO PLAY
+            </h2>
+            <ol className="mt-5 grid gap-4">
+              <li className="flex gap-3">
+                <span className="piece grid size-7 shrink-0 place-items-center rounded-md bg-accent font-mono text-xs font-extrabold text-accent-foreground">
+                  1
+                </span>
+                <p className="text-sm leading-relaxed text-foreground/85">
+                  <strong>You are dealt a hypothetical world</strong> — a short description of where
+                  the next few years might go — plus a time horizon: a 3-year, 5-year, or 10-year
+                  view.
                 </p>
-                <p className="mt-1.5 max-w-sm text-xs text-muted-foreground">
-                  All 25 sector scores stay face down until you lock in your answer. No peeking.
+              </li>
+              <li className="flex gap-3">
+                <span className="piece grid size-7 shrink-0 place-items-center rounded-md bg-accent font-mono text-xs font-extrabold text-accent-foreground">
+                  2
+                </span>
+                <p className="text-sm leading-relaxed text-foreground/85">
+                  <strong>Pick the three technologies</strong> you think benefit most in that world,
+                  over that horizon. The same world can reward opposite bets at 3 and 10 years.
                 </p>
+              </li>
+              <li className="flex gap-3">
+                <span className="piece grid size-7 shrink-0 place-items-center rounded-md bg-accent font-mono text-xs font-extrabold text-accent-foreground">
+                  3
+                </span>
+                <p className="text-sm leading-relaxed text-foreground/85">
+                  <strong>Submit and see the answer.</strong> We reveal the actual top three and
+                  explain, in plain language, why each one moved the way it did.
+                </p>
+              </li>
+            </ol>
+            <button
+              type="button"
+              onClick={start}
+              className="pressable mt-7 w-full rounded-lg border-2 border-border bg-primary py-3.5 font-mono text-sm font-bold uppercase tracking-[0.15em] text-primary-foreground shadow-[4px_4px_0_0_var(--tailwind)]"
+            >
+              Play
+            </button>
+          </section>
+        )}
+
+        {phase !== "intro" && (
+          <section className="surface-lacquer piece-lg rounded-xl p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-primary-foreground/60">
+                Your hypothetical world
+              </p>
+              <span className="rounded-md border border-primary-foreground/25 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wider text-primary-foreground">
+                {HORIZON_LABEL[horizon]} view
+              </span>
+            </div>
+            <h2 className="mt-2 font-mono text-2xl font-extrabold tracking-tight text-primary-foreground sm:text-3xl">
+              {scenario.name}
+            </h2>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-primary-foreground/85 sm:text-base">
+              {scenario.blurb}
+            </p>
+            <p className="mt-3 text-xs leading-relaxed text-primary-foreground/55">
+              Judged over {horizon} years. Some forces hit fast and fade; slow ones only bite by
+              year 10.
+            </p>
+          </section>
+        )}
+
+        {phase === "playing" && (
+          <section>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-mono text-sm font-extrabold uppercase tracking-wide">
+                Pick {PICKS} technologies
+              </h3>
+              <span className="font-mono text-xs font-bold text-muted-foreground">
+                {picks.length}/{PICKS} selected
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {TECHS.map((t) => {
+                const chosen = picks.includes(t.name);
+                const order = picks.indexOf(t.name);
+                return (
+                  <button
+                    key={t.name}
+                    type="button"
+                    onClick={() => togglePick(t.name)}
+                    className={`pressable flex items-center justify-between gap-2 rounded-lg border-2 px-3 py-2.5 text-left ${
+                      chosen
+                        ? "border-tailwind bg-tailwind/15 shadow-[3px_3px_0_0_var(--tailwind)]"
+                        : "surface-plate border-border"
+                    }`}
+                  >
+                    <span className="text-[13px] font-semibold leading-tight">{t.name}</span>
+                    {chosen && (
+                      <span className="piece grid size-5 shrink-0 place-items-center rounded bg-tailwind font-mono text-[10px] font-extrabold text-white">
+                        {order + 1}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              disabled={picks.length !== PICKS}
+              onClick={submit}
+              className="pressable mt-5 w-full rounded-lg border-2 border-border bg-primary py-3.5 font-mono text-sm font-bold uppercase tracking-[0.15em] text-primary-foreground shadow-[4px_4px_0_0_var(--tailwind)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+            >
+              {picks.length === PICKS ? "Submit my picks" : `Pick ${PICKS - picks.length} more`}
+            </button>
+          </section>
+        )}
+
+        {phase === "revealed" && (
+          <section className="grid gap-5">
+            <div className="surface-plate piece-lg rounded-xl p-5">
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                The answer — top {PICKS} over {horizon} years
+              </p>
+              <div className="mt-3 grid gap-2">
+                {actualTop.map((r, i) => {
+                  const youGotIt = picks.includes(r.name);
+                  return (
+                    <div
+                      key={r.name}
+                      className={`piece flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 ${
+                        youGotIt ? "bg-tailwind/15" : "bg-background"
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="piece grid size-7 shrink-0 place-items-center rounded-md bg-accent font-mono text-xs font-extrabold text-accent-foreground">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold">{r.name}</p>
+                          <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            {youGotIt ? "you called it" : "you missed it"}
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        className={`tabular shrink-0 font-mono text-xl font-extrabold ${
+                          r.value >= 0 ? "text-tailwind" : "text-headwind"
+                        }`}
+                      >
+                        {fmt(r.value)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-          </div>
-
-          <div className="lg:col-span-5">
-            <h3 className="mb-2 font-mono text-sm font-extrabold uppercase tracking-wide">
-              How to read a world
-            </h3>
-            <div className="surface-lacquer piece-lg rounded-xl p-4">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary-foreground/55">
-                {picked ? "Live causal read" : "The rules"}
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-primary-foreground/90">
-                {picked
-                  ? lesson
-                  : "Each lever sits somewhere between two poles. Sectors care about different levers, and slow levers only bite over a longer horizon — so the same world can reward opposite bets at 3 and 10 years."}
-              </p>
-              <p className="mt-3 text-[11px] leading-relaxed text-primary-foreground/50">
-                Right sector: 2 points. Right tailwind/headwind call: 1 more. Fast levers shape the 3
-                year view, slow ones only bite by year 10. The index runs &minus;50 to +50.
+              <p className="mt-4 font-mono text-sm font-extrabold uppercase tracking-wide">
+                {hits.length === 3
+                  ? "Clean sweep — all three."
+                  : hits.length === 0
+                    ? "Missed all three."
+                    : `You got ${hits.length} of ${PICKS}.`}
               </p>
             </div>
-          </div>
-        </div>
+
+            {picks.length > 0 && (
+              <div className="surface-plate piece-lg rounded-xl p-5">
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                  Why your picks moved
+                </p>
+                <div className="mt-3 grid gap-3">
+                  {picks.map((name) => {
+                    const r = ranked.find((x) => x.name === name);
+                    const tech = techByName(name);
+                    return (
+                      <div key={name} className="piece rounded-lg bg-background p-3.5">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <p className="text-sm font-bold">{name}</p>
+                          <p className="shrink-0 font-mono text-xs font-bold text-muted-foreground">
+                            #{r?.rank ?? "–"}{" "}
+                            <span
+                              className={`tabular ${
+                                (r?.value ?? 0) >= 0 ? "text-tailwind" : "text-headwind"
+                              }`}
+                            >
+                              {fmt(r?.value ?? 0)}
+                            </span>
+                          </p>
+                        </div>
+                        <p className="mt-1.5 text-xs leading-relaxed text-foreground/75">
+                          {buildLesson(tech, round)}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={playAgain}
+              className="pressable w-full rounded-lg border-2 border-border bg-primary py-3.5 font-mono text-sm font-bold uppercase tracking-[0.15em] text-primary-foreground shadow-[4px_4px_0_0_var(--tailwind)]"
+            >
+              Deal a new world
+            </button>
+          </section>
+        )}
       </div>
     </main>
   );
